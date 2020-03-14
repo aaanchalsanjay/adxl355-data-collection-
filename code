@@ -1,0 +1,149 @@
+/*
+Inspired by Gabriel Vivadal.
+Corrected and tested by S Aanchal on nodeMCU
+Cochin University.
+
+14March2020
+ive only created a new function "read_multiple_data" using the old function names to correctly recieve the data sent by the sensor.
+and added some new comments.
+to modify the code please read the datasheet CAREFULLY.
+ */
+
+#include <SPI.h>
+
+// Memory register addresses:  in hexadecimal format
+const int XDATA3 = 0x08;            //this is the start address. kindf important.
+const int XDATA2 = 0x09;
+const int XDATA1 = 0x0A;
+const int YDATA3 = 0x0B;
+const int YDATA2 = 0x0C;
+const int YDATA1 = 0x0D;
+const int ZDATA3 = 0x0E;
+const int ZDATA2 = 0x0F;
+const int ZDATA1 = 0x10;
+const int RANGE = 0x2C;
+const int POWER_CTL = 0x2D;
+
+// Device values
+const int RANGE_2G = 0x01;
+const int RANGE_4G = 0x02;
+const int RANGE_8G = 0x03;
+const int MEASURE_MODE = 0x06;     // Only accelerometer
+
+// Operations
+const int READ_BYTE = 0x01;
+const int WRITE_BYTE = 0x00;
+
+// Pins used for the connection with the sensor
+const int CHIP_SELECT_PIN = 5;      // change this value depending on your wiring.
+
+void setup() {
+  Serial.begin(9600);
+  SPI.begin();
+  SPI.beginTransaction(SPISettings(1000000, MSBFIRST, SPI_MODE0));    //for somereason i found this neccesary by looking into spi.h webpage
+
+  // Initalize the  data ready and chip select pins:
+  pinMode(CHIP_SELECT_PIN, OUTPUT);
+
+  //Configure ADXL355:
+  writeRegister(RANGE, RANGE_2G); // 2G   just change 2g to 4G or 8G depending on your requirment.
+  writeRegister(POWER_CTL, MEASURE_MODE); // Enable measure mode
+
+  // Give the sensor time to set up:
+  delay(100);
+}
+
+void loop() {
+
+  int axisMeasures[] = {0, 0, 0, 0, 0, 0, 0, 0, 0};
+  int dataSize = 9;
+
+  // Read accelerometer data
+  readMultipleData(XDATA3, dataSize, axisMeasures);
+
+  // Split data
+  int xdata = (axisMeasures[0] << 12) + (axisMeasures[1] << 4) + (axisMeasures[2] >> 4);
+  int ydata = (axisMeasures[3] << 12) + (axisMeasures[4] << 4) + (axisMeasures[5] >> 4);
+  int zdata = (axisMeasures[6] << 12) + (axisMeasures[7] << 4) + (axisMeasures[8] >> 4);
+//UNCOMMENT BELOW LINES TO SEE INDIVIDUAL REGISTER VALUES
+//  Serial.print("\n XYZ123=  ");
+//  for(int apple=0;apple<9;apple++)
+//  {
+//    Serial.print(axisMeasures[apple]);
+//    Serial.print("\t");
+//    
+//  }
+//  Serial.print(xdata);
+  // Apply two complement: SEEMED SHADY SO I COMMENTED IT. any experienced guy can solve this. im just an engineering junior dont mind me.
+ /* if (xdata >= 0x80000) {
+    xdata = ~xdata + 1;
+  }
+  if (ydata >= 0x80000) {
+    ydata = ~ydata + 1;
+  }
+  if (zdata >= 0x80000) {
+    zdata = ~zdata + 1;
+  }*/
+
+  // Print axis now. the below lines are for you to devide it by an appropriate constant to get a desired value.
+  float pxdata=xdata;
+  float pydata=ydata;
+  float pzdata=zdata;
+  Serial.print("X=");
+  Serial.print(pxdata);
+  Serial.print("\t\t");
+  
+  Serial.print("Y=");
+  Serial.print(pydata);
+  Serial.print("\t\t");
+
+  Serial.print("Z=");
+  Serial.print(pzdata);
+  Serial.print("\n");
+
+  // Next data in 100 milliseconds
+  delay(100);
+}
+
+/*  this function can be used to access specific register values.
+ * Write registry in specific device address
+ */
+void writeRegister(byte thisRegister, byte thisValue) {
+  byte dataToSend = (thisRegister << 1) | WRITE_BYTE;
+  digitalWrite(CHIP_SELECT_PIN, LOW);
+  SPI.transfer(dataToSend);
+  SPI.transfer(thisValue);
+  digitalWrite(CHIP_SELECT_PIN, HIGH);
+}
+
+/* 
+ * Read registry in specific device address
+ */
+unsigned int readRegistry(byte thisRegister) {
+  unsigned int result = 0;
+  byte dataToSend = (thisRegister << 1) | READ_BYTE;
+
+  digitalWrite(CHIP_SELECT_PIN, LOW);
+  SPI.transfer(dataToSend);
+  result = SPI.transfer(0x00);
+  digitalWrite(CHIP_SELECT_PIN, HIGH);
+  return result;
+}
+
+/* 
+ * Read multiple registries
+ */
+
+
+void readMultipleData(int *address, int dataSize, int *readedData)
+
+ {
+  digitalWrite(CHIP_SELECT_PIN, LOW);
+byte dataToSend = (address << 1) | READ_BYTE;
+readedData[0] = SPI.transfer(dataToSend);
+for(int i = 0; i < dataSize; i++) 
+{
+    readedData[i] = SPI.transfer(0x00);
+}
+ digitalWrite(CHIP_SELECT_PIN, HIGH);
+}
